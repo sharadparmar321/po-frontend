@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: po-only-frontend
+    env: docker
+    dockerfilePath: Dockerfile
+    branch: main
+    plan: free
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://your-backend-domain.onrender.com
+    autoDeploy: true
