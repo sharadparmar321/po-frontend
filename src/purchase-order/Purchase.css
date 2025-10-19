@@ -281,3 +281,11 @@
   color: #b91c1c;
   border-color: #fecaca;
 }
+
+/* Error Messages */
+.error-message {
+  color: #dc2626 !important;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  display: block;
+}

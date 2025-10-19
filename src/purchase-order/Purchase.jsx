@@ -72,6 +72,19 @@ Input.defaultProps = {
   ariaLabel: "input"
 };
 
+function ErrorMessage({ message }) {
+  if (!message) return null;
+  return <div className="error-message">{message}</div>;
+}
+
+ErrorMessage.propTypes = {
+  message: PropTypes.string
+};
+
+ErrorMessage.defaultProps = {
+  message: ""
+};
+
 export default function Purchase() {
   const today = new Date().toISOString().split("T")[0];
   const [formData, setFormData] = useState({
@@ -110,6 +123,7 @@ export default function Purchase() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState("idle");
+  const [validationErrors, setValidationErrors] = useState({});
 
   const handleCompanyNameChange = (e) => {
     setFormData({
@@ -329,7 +343,68 @@ export default function Purchase() {
     }
   }, [formData]);
 
+  const validateForm = () => {
+    const errors = {};
+
+    // Company validation
+    if (!formData.company.name.trim()) {
+      errors.companyName = "Field cannot be empty";
+    }
+    if (!formData.company.contact || !formData.company.contact.trim()) {
+      errors.companyContact = "Field cannot be empty";
+    }
+    if (!formData.company.address.trim()) {
+      errors.companyAddress = "Field cannot be empty";
+    }
+    if (!formData.company.cityStateZip.trim()) {
+      errors.companyCityStateZip = "Field cannot be empty";
+    }
+    if (!formData.company.country.trim()) {
+      errors.companyCountry = "Field cannot be empty";
+    }
+
+    // Vendor validation
+    if (!formData.vendor.name.trim()) {
+      errors.vendorName = "Field cannot be empty";
+    }
+    if (!formData.vendor.address.trim()) {
+      errors.vendorAddress = "Field cannot be empty";
+    }
+    if (!formData.vendor.cityStateZip.trim()) {
+      errors.vendorCityStateZip = "Field cannot be empty";
+    }
+    if (!formData.vendor.country.trim()) {
+      errors.vendorCountry = "Field cannot be empty";
+    }
+
+    // Order info validation
+    if (!formData.orderInfo.poNumber.trim()) {
+      errors.poNumber = "Field cannot be empty";
+    }
+
+    // Line items validation
+    formData.lineItems.forEach((item, index) => {
+      if (!item.description.trim()) {
+        errors[`lineItemDescription_${index}`] = "Field cannot be empty";
+      }
+      if (item.quantity <= 0) {
+        errors[`lineItemQuantity_${index}`] = "Field cannot be empty";
+      }
+      if (item.rate <= 0) {
+        errors[`lineItemRate_${index}`] = "Field cannot be empty";
+      }
+    });
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async () => {
+    // Validate form before submission
+    if (!validateForm()) {
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitStatus("idle");
 
@@ -414,6 +489,7 @@ export default function Purchase() {
                 ariaLabel="Company name"
                 className="company-input"
               />
+              <ErrorMessage message={validationErrors.companyName} />
               <div className="company-details">
                 <div>
                   <Input
@@ -423,6 +499,7 @@ export default function Purchase() {
                     onChange={updateNestedField("company", "contact")}
                     className="input-description"
                   />
+                  <ErrorMessage message={validationErrors.companyContact} />
                 </div>
                 <div>
                   <Input
@@ -432,6 +509,7 @@ export default function Purchase() {
                     onChange={updateNestedField("company", "address")}
                     className="input-description"
                   />
+                  <ErrorMessage message={validationErrors.companyAddress} />
                 </div>
                 <div>
                   <Input
@@ -441,6 +519,7 @@ export default function Purchase() {
                     onChange={updateNestedField("company", "cityStateZip")}
                     className="input-description"
                   />
+                  <ErrorMessage message={validationErrors.companyCityStateZip} />
                 </div>
                 <div>
                   <Input
@@ -450,6 +529,7 @@ export default function Purchase() {
                     onChange={updateNestedField("company", "country")}
                     className="input-description"
                   />
+                  <ErrorMessage message={validationErrors.companyCountry} />
                 </div>
               </div>
             </div>
@@ -471,6 +551,7 @@ export default function Purchase() {
                     onChange={updateNestedField("vendor", "name")}
                     className="input-description"
                   />
+                  <ErrorMessage message={validationErrors.vendorName} />
                 </div>
                 <div>
                   <Input
@@ -480,6 +561,7 @@ export default function Purchase() {
                     onChange={updateNestedField("vendor", "address")}
                     className="input-description"
                   />
+                  <ErrorMessage message={validationErrors.vendorAddress} />
                 </div>
                 <div>
                   <Input
@@ -489,6 +571,7 @@ export default function Purchase() {
                     onChange={updateNestedField("vendor", "cityStateZip")}
                     className="input-description"
                   />
+                  <ErrorMessage message={validationErrors.vendorCityStateZip} />
                 </div>
                 <div>
                   <Input
@@ -498,6 +581,7 @@ export default function Purchase() {
                     onChange={updateNestedField("vendor", "country")}
                     className="input-description"
                   />
+                  <ErrorMessage message={validationErrors.vendorCountry} />
                 </div>
               </div>
             </div>
@@ -511,6 +595,7 @@ export default function Purchase() {
                   onChange={updateNestedField("orderInfo", "poNumber")}
                   className="input-description"
                 />
+                <ErrorMessage message={validationErrors.poNumber} />
               </div>
               <div>
                 <span className="label">Order Date</span>
@@ -549,7 +634,7 @@ export default function Purchase() {
                 </tr>
               </thead>
               <tbody>
-                {formData.lineItems.map((item) => (
+                {formData.lineItems.map((item, index) => (
                   <tr key={item.id}>
                     <td>
                       <Input
@@ -559,6 +644,7 @@ export default function Purchase() {
                         onChange={(e) => updateLineItem(item.id, "description", e.target.value)}
                         className="input-description"
                       />
+                      <ErrorMessage message={validationErrors[`lineItemDescription_${index}`]} />
                     </td>
                     <td className="center">
                       <Input
@@ -569,6 +655,7 @@ export default function Purchase() {
                         onChange={(e) => updateLineItem(item.id, "quantity", Number.parseFloat(e.target.value) || 0)}
                         className="input-qty"
                       />
+                      <ErrorMessage message={validationErrors[`lineItemQuantity_${index}`]} />
                     </td>
                     <td className="center">
                       <Input
@@ -580,6 +667,7 @@ export default function Purchase() {
                         onChange={(e) => updateLineItem(item.id, "rate", Number.parseFloat(e.target.value) || 0)}
                         className="input-rate"
                       />
+                      <ErrorMessage message={validationErrors[`lineItemRate_${index}`]} />
                     </td>
                     <td className="center">
                       <Input
