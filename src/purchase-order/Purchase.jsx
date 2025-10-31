@@ -372,6 +372,7 @@ export default function Purchase() {
 
       // Duplicate validation: reuse existing or create new before PDF
       let newUnique = ""
+      let createdNew = false
       try {
         const dup = await checkDuplicate()
         if (dup?.exists) {
@@ -387,20 +388,25 @@ export default function Purchase() {
             const responseData = await response.json()
             console.log("[PO][UI] exportToPDF API success", responseData)
             newUnique = responseData.unique_id || responseData.data?.unique_id || newUnique
+            createdNew = true
           } else {
             const errText = await response.text()
-            console.warn("[PO][UI] DB save failed during exportToPDF; continuing to export.", response.status, errText)
+            console.warn("[PO][UI] DB save failed during exportToPDF; aborting PDF.", response.status, errText)
+            return
           }
         }
       } catch (dbErr) {
-        console.warn("[PO][UI] Duplicate check/save error during exportToPDF; continuing to export.", dbErr)
+        console.warn("[PO][UI] Duplicate check/save error during exportToPDF; aborting PDF.", dbErr)
+        return
       }
 
-      // Update Google Sheet with unique_id
-      try {
-        await updateGoogleSheet(newUnique)
-      } catch (sheetError) {
-        console.warn("[PO][UI] Google Sheet update failed during PDF export:", sheetError)
+      // Update Google Sheet ONLY if we created a new record
+      if (createdNew) {
+        try {
+          await updateGoogleSheet(newUnique)
+        } catch (sheetError) {
+          console.warn("[PO][UI] Google Sheet update failed during PDF export:", sheetError)
+        }
       }
 
       // Generate and download PDF
