@@ -4,20 +4,11 @@ import "./SimpleHeader.css";
 function SimpleHeader() {
   return (
     <>
-      <link
-        href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap"
-        rel="stylesheet"
-      />
+      <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet" />
       <header className="simple-header">
         <div className="logo-container">
           <div className="logo-wrapper">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <g clipPath="url(#clip0_114_6)">
                 <path
                   fillRule="evenodd"

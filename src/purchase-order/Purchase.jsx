@@ -1,47 +1,39 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
-import PropTypes from "prop-types";
-import { Plus, X } from "lucide-react";
-import { jsPDF as JSPDF } from "jspdf"; // Import jsPDF with capitalized alias to satisfy eslint new-cap
-import autoTable from "jspdf-autotable";
-import SimpleHeader from "../components/SimpleHeader";
-import "./Purchase.css";
+/* eslint-disable react/react-in-jsx-scope, jsx-a11y/label-has-associated-control */
+/* eslint-disable react/jsx-one-expression-per-line, object-curly-newline, comma-dangle, semi */
 
-function Button({
-  children,
-  onClick,
-  disabled,
-  className
-}) {
+import React, { useState, useCallback } from "react"
+import PropTypes from "prop-types"
+import { Plus, X, Calendar } from "lucide-react"
+import { jsPDF as JSPDF } from "jspdf"
+import autoTable from "jspdf-autotable"
+import * as XLSX from "xlsx";
+import SimpleHeader from "../components/SimpleHeader"
+import "./Purchase.css"
+
+function Button({ children, onClick, disabled, className }) {
   return (
     <button type="button" onClick={onClick} disabled={disabled} className={`px-4 py-2 rounded ${className}`}>
       {children}
     </button>
-  );
+  )
 }
 
 Button.propTypes = {
   children: PropTypes.node.isRequired,
   onClick: PropTypes.func,
   disabled: PropTypes.bool,
-  className: PropTypes.string
-};
+  className: PropTypes.string,
+}
 
 Button.defaultProps = {
   onClick: () => {},
   disabled: false,
-  className: ""
-};
+  className: "",
+}
 
-function Input({
-  className,
-  value,
-  onChange,
-  type,
-  placeholder,
-  ariaLabel
-}) {
+function Input({ className, value, onChange, type, placeholder, ariaLabel }) {
   return (
     <input
       value={value}
@@ -51,7 +43,59 @@ function Input({
       aria-label={ariaLabel || "input"}
       className={`border rounded px-2 py-1 ${className || ""}`}
     />
-  );
+  )
+}
+
+function Modal({ title, description, primaryText, secondaryText, onPrimary, onClose }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="po-modal-overlay"
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}
+    >
+      <div
+        className="po-modal-card"
+        style={{ width: 420, maxWidth: "92%", background: "#fff", borderRadius: 8, boxShadow: "0 10px 30px rgba(0,0,0,0.18)", overflow: "hidden" }}
+      >
+        <div style={{ padding: "14px 16px", background: "#f1f5f9", borderBottom: "1px solid #e2e8f0" }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>{title}</div>
+        </div>
+        <div style={{ padding: 16, fontSize: 14, lineHeight: 1.5 }}>
+          {description}
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: 12, borderTop: "1px solid #e2e8f0" }}>
+          {secondaryText && (
+            <button type="button" onClick={onClose} className="px-3 py-1.5" style={{ border: "1px solid #cbd5e1", borderRadius: 6, background: "#fff" }}>
+              {secondaryText}
+            </button>
+          )}
+          {primaryText && (
+            <button type="button" onClick={onPrimary} className="px-3 py-1.5" style={{ borderRadius: 6, background: "#2563eb", color: "#fff", border: 0 }}>
+              {primaryText}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+Modal.propTypes = {
+  title: PropTypes.node.isRequired,
+  description: PropTypes.node,
+  primaryText: PropTypes.node,
+  secondaryText: PropTypes.node,
+  onPrimary: PropTypes.func,
+  onClose: PropTypes.func,
+}
+
+Modal.defaultProps = {
+  description: null,
+  primaryText: null,
+  secondaryText: null,
+  onPrimary: () => {},
+  onClose: () => {},
 }
 
 Input.propTypes = {
@@ -60,8 +104,8 @@ Input.propTypes = {
   onChange: PropTypes.func,
   type: PropTypes.string,
   placeholder: PropTypes.string,
-  ariaLabel: PropTypes.string
-};
+  ariaLabel: PropTypes.string,
+}
 
 Input.defaultProps = {
   className: "",
@@ -69,41 +113,107 @@ Input.defaultProps = {
   onChange: () => {},
   type: "text",
   placeholder: "",
-  ariaLabel: "input"
-};
+  ariaLabel: "input",
+}
 
 function ErrorMessage({ message }) {
-  if (!message) return null;
-  return <div className="error-message">{message}</div>;
+  if (!message) return null
+  return <div className="error-message">{message}</div>
 }
 
 ErrorMessage.propTypes = {
-  message: PropTypes.string
-};
+  message: PropTypes.string,
+}
 
 ErrorMessage.defaultProps = {
-  message: ""
-};
+  message: "",
+}
+
+// Helper for Excel export (outside component)
+function exportToExcel(poData, uniqueId) {
+  const wb = XLSX.utils.book_new();
+  const orderRows = poData.lineItems.map((item, idx) => ({
+    "PO Unique ID": uniqueId || poData.orderInfo.poNumber || "",
+    "Buyer Name": poData.company.name,
+    "Buyer Address": poData.company.address,
+    "Buyer City/State/Zip": poData.company.cityStateZip,
+    "Buyer Country": poData.company.country,
+    "Buyer Contact": poData.company.contact,
+    "Vendor Name": poData.vendor.name,
+    "Vendor Address": poData.vendor.address,
+    "Vendor City/State/Zip": poData.vendor.cityStateZip,
+    "Vendor Country": poData.vendor.country,
+    "PO Number": poData.orderInfo.poNumber,
+    "Order Date": poData.orderInfo.orderDate,
+    "Delivery Date": poData.orderInfo.deliveryDate,
+    "Item Description": item.description,
+    Quantity: item.quantity,
+    Rate: item.rate,
+    "GST (%)": item.gst,
+    "Item Amount": item.amount,
+    Subtotal: poData.subTotal,
+    Total: poData.total
+  }));
+  const ws = XLSX.utils.json_to_sheet(orderRows);
+  XLSX.utils.book_append_sheet(wb, ws, "PurchaseOrder");
+  XLSX.writeFile(wb, `purchase-order-${poData.orderInfo.poNumber || uniqueId || "PO"}.xlsx`);
+}
+
+// Helper to build payload for API
+function buildPurchaseOrderPayload(formData) {
+  return {
+    company: {
+      name: formData.company.name,
+      address: formData.company.address,
+      cityStateZip: formData.company.cityStateZip,
+      country: formData.company.country,
+      contact: formData.company.contact,
+    },
+    vendor: {
+      name: formData.vendor.name,
+      address: formData.vendor.address,
+      cityStateZip: formData.vendor.cityStateZip,
+      country: formData.vendor.country,
+    },
+    orderInfo: {
+      poNumber: formData.orderInfo.poNumber,
+      orderDate: new Date(formData.orderInfo.orderDate).toISOString().split("T")[0],
+      deliveryDate: new Date(formData.orderInfo.deliveryDate).toISOString().split("T")[0],
+    },
+    lineItems: formData.lineItems.map((item) => ({
+      description: item.description,
+      quantity: item.quantity,
+      rate: item.rate,
+      gst: item.gst,
+      amount: item.amount,
+    })),
+    subTotal: formData.subTotal,
+    taxRate: formData.taxRate,
+    taxAmount: formData.taxAmount,
+    total: formData.total,
+  }
+}
 
 export default function Purchase() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toISOString().split("T")[0]
   const [formData, setFormData] = useState({
     company: {
       name: "",
       address: "",
       cityStateZip: "",
-      country: ""
+      country: "",
+      contact: "",
     },
     vendor: {
       name: "",
       address: "",
       cityStateZip: "",
-      country: ""
+      country: "",
     },
     orderInfo: {
       poNumber: "",
       orderDate: today,
-      deliveryDate: today
+      deliveryDate: today,
     },
     lineItems: [
       {
@@ -112,56 +222,76 @@ export default function Purchase() {
         quantity: 1,
         rate: 0.0,
         gst: 0.0,
-        amount: 0.0
-      }
+        amount: 0.0,
+      },
     ],
     subTotal: 0.0,
     taxRate: 0,
     taxAmount: 0.0,
-    total: 0.0
-  });
+    total: 0.0,
+  })
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState("idle");
-  const [validationErrors, setValidationErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitStatus, setSubmitStatus] = useState("idle")
+  const [validationErrors, setValidationErrors] = useState({})
+  const [modal, setModal] = useState(null)
 
   const handleCompanyNameChange = (e) => {
     setFormData({
       ...formData,
-      company: { ...formData.company, name: e.target.value }
-    });
-  };
+      company: { ...formData.company, name: e.target.value },
+    })
+  }
 
   const updateNestedField = (section, field) => (e) => {
     setFormData({
       ...formData,
-      [section]: { ...formData[section], [field]: e.target.value }
-    });
-  };
+      [section]: { ...formData[section], [field]: e.target.value },
+    })
+  }
+
+  // Sanitize numeric-only fields (PO number and pincodes)
+  const updateNumericField = (section, field) => (e) => {
+    const digitsOnly = String(e.target.value || "").replace(/\D/g, "")
+    setFormData({
+      ...formData,
+      [section]: { ...formData[section], [field]: digitsOnly },
+    })
+  }
 
   const calculateTotals = (items) => {
-    const subTotal = items.reduce((sum, item) => sum + item.amount, 0);
-    const total = subTotal;
-    return { subTotal, taxAmount: 0, total };
-  };
+    const subTotal = items.reduce((sum, item) => sum + item.amount, 0)
+    const total = subTotal
+    return { subTotal, taxAmount: 0, total }
+  }
 
   const updateLineItem = (id, field, value) => {
     const updatedItems = formData.lineItems.map((item) => {
       if (item.id === id) {
-        const updatedItem = { ...item, [field]: value };
-        updatedItem.amount = updatedItem.quantity * updatedItem.rate * (1 + updatedItem.gst / 100);
-        return updatedItem;
-      }
-      return item;
-    });
+        // Clamp negatives for numeric fields to 0
+        let normalizedValue = value
+        if (field === "quantity" || field === "rate" || field === "gst") {
+          normalizedValue = Number.isFinite(value) ? Math.max(0, value) : 0
+        }
 
-    const totals = calculateTotals(updatedItems);
+        const updatedItem = { ...item, [field]: normalizedValue }
+        // Always compute amount from quantity, rate and gst
+        const qty = Number(updatedItem.quantity) || 0
+        const rate = Number(updatedItem.rate) || 0
+        const gst = Number(updatedItem.gst) || 0
+        updatedItem.amount = qty * rate * (1 + gst / 100)
+        return updatedItem
+      }
+      return item
+    })
+
+    const totals = calculateTotals(updatedItems)
     setFormData({
       ...formData,
       lineItems: updatedItems,
-      ...totals
-    });
-  };
+      ...totals,
+    })
+  }
 
   const addLineItem = () => {
     const newItem = {
@@ -170,494 +300,747 @@ export default function Purchase() {
       quantity: 1,
       rate: 0.0,
       gst: 0.0,
-      amount: 0.0
-    };
+      amount: 0.0,
+    }
     setFormData({
       ...formData,
-      lineItems: [...formData.lineItems, newItem]
-    });
-  };
+      lineItems: [...formData.lineItems, newItem],
+    })
+  }
 
   const exportToJSON = () => {
-    const jsonData = JSON.stringify(formData, null, 2);
-    const blob = new Blob([jsonData], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `purchase-order-${formData.orderInfo.poNumber}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+    const jsonData = JSON.stringify(formData, null, 2)
+    const blob = new Blob([jsonData], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `purchase-order-${formData.orderInfo.poNumber}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
-  const updateGoogleSheet = async () => {
+  const checkDuplicate = async () => {
+    const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000"
+    const payload = buildPurchaseOrderPayload(formData)
+    const resp = await fetch(`${API_BASE_URL}/purchaseorder/checkDuplicate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    if (!resp.ok) {
+      throw new Error(`Duplicate check failed (${resp.status})`)
+    }
+    return resp.json()
+  }
+
+  const updateGoogleSheet = async (uniqueId) => {
     try {
-      const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+      const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000"
       const response = await fetch(`${API_BASE_URL}/purchaseorder/updateGoogleSheet`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData)
-      });
+        body: JSON.stringify({
+          ...formData,
+          uniqueId: uniqueId || undefined,
+        }),
+      })
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Failed to update Google Sheet: ${errorData.message || "Unknown error"}`);
+        const errorData = await response.json()
+        throw new Error(`Failed to update Google Sheet: ${errorData.message || "Unknown error"}`)
       }
-      console.log("Google Sheet updated successfully");
+      console.log("Google Sheet updated successfully")
     } catch (error) {
-      console.error("Error updating Google Sheet:", error);
-      throw error; // Re-throw to handle in calling functions
+      console.error("Error updating Google Sheet:", error)
+      throw error
     }
-  };
+  }
 
   const exportToPDF = useCallback(async () => {
     try {
-      await updateGoogleSheet(); // Ensure Google Sheet is updated
-
-      // Send data to backend for PDF generation
-      const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-      const response = await fetch(`${API_BASE_URL}/purchaseorder`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to export to PDF");
+      const isValid = validateForm()
+      if (!isValid) {
+        console.warn("[PO][UI] Validation failed; blocking exportToPDF");
+        return
       }
 
-      // Generate PDF
-      const doc = new JSPDF();
+      const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000"
+      const payload = buildPurchaseOrderPayload(formData)
+      console.log("[PO][UI] exportToPDF payload", payload)
 
-      const marginX = 20;
-      const marginY = 20;
+      // Duplicate validation: reuse existing or create new before PDF
+      let newUnique = ""
+      try {
+        const dup = await checkDuplicate()
+        if (dup?.exists) {
+          newUnique = dup.unique_id || ""
+          console.log("[PO][UI] Duplicate found; using existing record for PDF", newUnique)
+        } else {
+          const response = await fetch(`${API_BASE_URL}/purchaseorder`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+          if (response.ok) {
+            const responseData = await response.json()
+            console.log("[PO][UI] exportToPDF API success", responseData)
+            newUnique = responseData.unique_id || responseData.data?.unique_id || newUnique
+          } else {
+            const errText = await response.text()
+            console.warn("[PO][UI] DB save failed during exportToPDF; continuing to export.", response.status, errText)
+          }
+        }
+      } catch (dbErr) {
+        console.warn("[PO][UI] Duplicate check/save error during exportToPDF; continuing to export.", dbErr)
+      }
 
-      const formatCurrency = (num) => `INR ${Number(num || 0).toFixed(2)}`;
-      const safe = (val) => (val && String(val).trim().length > 0 ? String(val) : "-");
+      // Update Google Sheet with unique_id
+      try {
+        await updateGoogleSheet(newUnique)
+      } catch (sheetError) {
+        console.warn("[PO][UI] Google Sheet update failed during PDF export:", sheetError)
+      }
+
+      // Generate and download PDF
+      const doc = new JSPDF()
+      const marginX = 15
+      const marginY = 15
+      const pageWidth = 210
+      const pageHeight = 297
+      const numberFormatter = new Intl.NumberFormat("en-IN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+      const formatNumber = (num) => numberFormatter.format(Number(num || 0))
+      const formatCurrency = (num) => `INR ${formatNumber(num)}`
+      const safe = (val) => (val && String(val).trim().length > 0 ? String(val) : "-")
+
+      // Brand colors
+      const primary = [59, 130, 246] // blue-500
+      const slate = [71, 85, 105] // slate-600
+      const lightGray = [243, 244, 246]
+
+      // Helper: load an image from public folder
+      const loadImage = (src) => new Promise((resolve, reject) => {
+        const img = new Image()
+        img.crossOrigin = "anonymous"
+        img.onload = () => resolve(img)
+        img.onerror = reject
+        img.src = src
+      })
+
+      // Header ribbon
+      doc.setFillColor(primary[0], primary[1], primary[2])
+      doc.rect(0, 0, pageWidth, 18, "F")
+
+      // Try to draw brand logo if available; fallback to badge
+      let drewLogo = false
+      try {
+        const base = process.env.PUBLIC_URL || ""
+        const srcCandidates = [
+          `${base}/proquo-logo.png`,
+          `${base}/proquo-logo.jpg`,
+          `${base}/logo.png`,
+        ]
+        /* eslint-disable no-restricted-syntax */
+        for (const src of srcCandidates) {
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            const img = await loadImage(src)
+            // Place logo on left in ribbon
+            const logoH = 10
+            const logoW = 34
+            doc.addImage(img, "PNG", marginX, 4, logoW, logoH)
+            drewLogo = true
+            break
+          } catch (e) {
+            // try next
+          }
+        }
+        /* eslint-enable no-restricted-syntax */
+      } catch (e) {
+        // ignore
+      }
+      if (!drewLogo) {
+        // Logo badge fallback
+        doc.setFillColor(255, 255, 255)
+        doc.circle(marginX + 6, 9, 5, "F")
+        doc.setTextColor(primary[0], primary[1], primary[2])
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(10)
+        doc.text("P", marginX + 3.6, 12, undefined)
+      }
 
       // Title
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(20);
-      doc.text("PURCHASE ORDER", 105, marginY, { align: "center" });
-      doc.setDrawColor(75, 85, 99);
-      doc.line(marginX, marginY + 6, 210 - marginX, marginY + 6);
+      doc.setTextColor(255, 255, 255)
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(16)
+      doc.text("PURCHASE ORDER", pageWidth / 2, 12, { align: "center" })
 
-      // Company block (left)
-      let y = marginY + 20;
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      const companyLines = [
-        safe(formData.company.name || ""),
-        safe(formData.company.address || ""),
-        safe(formData.company.cityStateZip || ""),
-        safe(formData.company.country || "")
-      ];
-      companyLines.forEach((line, idx) => {
-        doc.text(line, marginX, y + idx * 8);
-      });
+      // Reset drawing styles
+      doc.setTextColor(0, 0, 0)
+      doc.setDrawColor(230, 232, 235)
+      doc.setLineWidth(0.3)
 
-      // Order info box (right)
-      const boxX = 125;
-      const boxY = marginY + 12;
-      const boxW = 65;
-      const boxH = 32;
-      doc.setDrawColor(209, 213, 219);
-      doc.rect(boxX, boxY, boxW, boxH);
+      let y = marginY + 14
 
-      doc.setFont("helvetica", "bold");
-      doc.text("PO#", boxX + 4, boxY + 8);
-      doc.text("Order Date", boxX + 4, boxY + 16);
-      doc.text("Delivery Date", boxX + 4, boxY + 24);
+      // Subtle watermark
+      doc.setFontSize(46)
+      doc.setTextColor(240, 245, 255)
+      doc.text("Proquo.tech", pageWidth / 2, pageHeight / 2, { align: "center", angle: -25 })
+      doc.setTextColor(0, 0, 0)
 
-      doc.setFont("helvetica", "normal");
-      doc.text(safe(formData.orderInfo.poNumber), boxX + boxW - 4, boxY + 8, { align: "right" });
-      doc.text(safe(formData.orderInfo.orderDate), boxX + boxW - 4, boxY + 16, { align: "right" });
-      doc.text(safe(formData.orderInfo.deliveryDate), boxX + boxW - 4, boxY + 24, { align: "right" });
+      // Buyer/Company Details Section
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(10)
+      doc.text("Buyer Details:", marginX, y)
+      y += 6
 
-      // Vendor section title
-      y = marginY + 60;
-      doc.setFont("helvetica", "bold");
-      doc.text("Vendor Address:", marginX, y);
-      doc.setFont("helvetica", "normal");
-      const vendorLines = [
-        safe(formData.vendor.name || "Vendor name"),
-        safe(formData.vendor.address || "Vendor address"),
-        safe(formData.vendor.cityStateZip || "City, State Zip"),
-        safe(formData.vendor.country || "Country")
-      ];
-      vendorLines.forEach((line, idx) => {
-        doc.text(line, marginX, y + 10 + idx * 8);
-      });
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(9)
+      const lineHeight = 5
 
-      // Table of items
+      if (formData.company.name) {
+        doc.text(`Buyer/Company Name: ${safe(formData.company.name)}`, marginX, y)
+        y += lineHeight
+      }
+      if (formData.company.address) {
+        doc.text(`Company Address: ${safe(formData.company.address)}`, marginX, y)
+        y += lineHeight
+      }
+      if (formData.company.cityStateZip) {
+        doc.text(`Pincode: ${safe(formData.company.cityStateZip)}`, marginX, y)
+        y += lineHeight
+      }
+      if (formData.company.country) {
+        doc.text(`Country: ${safe(formData.company.country)}`, marginX, y)
+        y += lineHeight
+      }
+      if (formData.company.contact) {
+        doc.text(`Contact Person: ${safe(formData.company.contact)}`, marginX, y)
+        y += lineHeight
+      }
+
+      // Order Information Card (Right side)
+      const boxX = 130
+      const boxY = marginY + 16
+      const boxW = 65
+      const boxH = 30
+      doc.setFillColor(255, 255, 255)
+      doc.setDrawColor(226, 232, 240)
+      doc.rect(boxX, boxY, boxW, boxH, "FD")
+
+      let boxYPos = boxY + 6
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(8)
+      doc.text("PO#", boxX + 3, boxYPos)
+      doc.setFont("helvetica", "normal")
+      doc.text(safe(formData.orderInfo.poNumber), boxX + boxW - 3, boxYPos, { align: "right" })
+
+      boxYPos += 7
+      doc.setFont("helvetica", "bold")
+      doc.text("Order Date", boxX + 3, boxYPos)
+      doc.setFont("helvetica", "normal")
+      doc.text(safe(formData.orderInfo.orderDate), boxX + boxW - 3, boxYPos, { align: "right" })
+
+      boxYPos += 7
+      doc.setFont("helvetica", "bold")
+      doc.text("Delivery Date", boxX + 3, boxYPos)
+      doc.setFont("helvetica", "normal")
+      doc.text(safe(formData.orderInfo.deliveryDate), boxX + boxW - 3, boxYPos, { align: "right" })
+
+      // Vendor Details Section
+      y = Math.max(y, marginY + 48)
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(10)
+      doc.text("Vendor Details:", marginX, y)
+      y += 6
+
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(9)
+      if (formData.vendor.name) {
+        doc.text(`Vendor Name: ${safe(formData.vendor.name)}`, marginX, y)
+        y += lineHeight
+      }
+      if (formData.vendor.address) {
+        doc.text(`Vendor Address: ${safe(formData.vendor.address)}`, marginX, y)
+        y += lineHeight
+      }
+      if (formData.vendor.cityStateZip) {
+        doc.text(`Pincode: ${safe(formData.vendor.cityStateZip)}`, marginX, y)
+        y += lineHeight
+      }
+      if (formData.vendor.country) {
+        doc.text(`Country: ${safe(formData.vendor.country)}`, marginX, y)
+        y += lineHeight
+      }
+
+      // Line Items Table
+      const tableStartY = y + 8
       autoTable(doc, {
-        startY: y + 48,
+        startY: tableStartY,
         head: [["Item Description", "Qty", "Rate", "GST (%)", "Amount"]],
         body: formData.lineItems.map((item) => [
-          item.description || "Enter item description",
-          item.quantity,
-          Number(item.rate || 0).toFixed(2),
-          Number(item.gst || 0).toFixed(2),
-          Number(item.amount || 0).toFixed(2)
+          safe(item.description || ""),
+          Number(item.quantity || 0),
+          formatNumber(item.rate || 0),
+          formatNumber(item.gst || 0),
+          formatNumber(item.amount || 0),
         ]),
         theme: "grid",
-        styles: { fontSize: 10, cellPadding: 3, halign: "center" },
-        headStyles: { fillColor: [75, 85, 99], textColor: [255, 255, 255] },
-        alternateRowStyles: { fillColor: [245, 246, 248] },
+        styles: {
+          fontSize: 8,
+          cellPadding: 2.5,
+          halign: "center",
+          overflow: "linebreak",
+        },
+        headStyles: {
+          fillColor: primary,
+          textColor: [255, 255, 255],
+          fontSize: 9,
+          fontStyle: "bold",
+        },
+        alternateRowStyles: { fillColor: lightGray },
         columnStyles: {
-          0: { halign: "left", cellWidth: 100 },
-          1: { halign: "center", cellWidth: 20 },
-          2: { halign: "center", cellWidth: 30 },
-          3: { halign: "center", cellWidth: 30 },
-          4: { halign: "right", cellWidth: 30 }
-        }
-      });
+          0: { halign: "left", cellWidth: 90 },
+          1: { halign: "center", cellWidth: 18 },
+          2: { halign: "center", cellWidth: 25 },
+          3: { halign: "center", cellWidth: 25 },
+          4: { halign: "right", cellWidth: 30 },
+        },
+        margin: { left: marginX, right: marginX },
+      })
 
-      // Totals block as a small table aligned right
-      const afterTableY = doc.lastAutoTable.finalY + 8;
+      // Totals Section (only TOTAL)
+      const afterTableY = doc.lastAutoTable.finalY + 6
       autoTable(doc, {
         startY: afterTableY,
         body: [
-          ["Sub Total", formatCurrency(formData.subTotal)],
-          [{ content: "TOTAL", styles: { fontStyle: "bold" } }, { content: formatCurrency(formData.total), styles: { fontStyle: "bold" } }]
+          [
+            { content: "TOTAL", styles: { fontStyle: "bold", fontSize: 9, textColor: primary } },
+            { content: formatCurrency(formData.total), styles: { fontStyle: "bold", fontSize: 9, textColor: primary } },
+          ],
         ],
         theme: "plain",
-        styles: { fontSize: 11, halign: "right" },
-        tableWidth: 80,
-        margin: { left: 210 - 20 - 80 }
-      });
+        styles: { fontSize: 9, halign: "right", cellPadding: 2 },
+        tableWidth: 75,
+        margin: { left: pageWidth - marginX - 75 },
+      })
 
-      // Footer note
-      const footerY = doc.lastAutoTable.finalY + 12;
-      doc.setFontSize(9);
-      doc.setTextColor(107, 114, 128);
-      doc.text("Generated by Proquo", marginX, footerY);
+      // Footer
+      const footerY = Math.min(doc.lastAutoTable.finalY + 10, pageHeight - 15)
+      doc.setFontSize(7)
+      doc.setTextColor(slate[0], slate[1], slate[2])
+      doc.setFont("helvetica", "normal")
+      doc.text("Generated by Proquo", marginX, footerY)
 
-      // Save
-      doc.save(`purchase-order-${formData.orderInfo.poNumber || "PO"}.pdf`);
+      doc.save(`purchase-order-${formData.orderInfo.poNumber || "PO"}.pdf`)
+      console.log("[PO][UI] PDF downloaded")
     } catch (error) {
-      console.error("Error exporting to PDF:", error);
+      console.error("[PO][UI] Error exporting to PDF:", error)
     }
-  }, [formData]);
+  }, [formData])
 
   const validateForm = () => {
-    const errors = {};
+    const errors = {}
 
-    // Company validation
     if (!formData.company.name.trim()) {
-      errors.companyName = "Field cannot be empty";
+      errors.companyName = "Field cannot be empty"
     }
     if (!formData.company.contact || !formData.company.contact.trim()) {
-      errors.companyContact = "Field cannot be empty";
+      errors.companyContact = "Field cannot be empty"
     }
     if (!formData.company.address.trim()) {
-      errors.companyAddress = "Field cannot be empty";
+      errors.companyAddress = "Field cannot be empty"
     }
     if (!formData.company.cityStateZip.trim()) {
-      errors.companyCityStateZip = "Field cannot be empty";
+      errors.companyCityStateZip = "Field cannot be empty"
     }
     if (!formData.company.country.trim()) {
-      errors.companyCountry = "Field cannot be empty";
+      errors.companyCountry = "Field cannot be empty"
     }
 
-    // Vendor validation
     if (!formData.vendor.name.trim()) {
-      errors.vendorName = "Field cannot be empty";
+      errors.vendorName = "Field cannot be empty"
     }
     if (!formData.vendor.address.trim()) {
-      errors.vendorAddress = "Field cannot be empty";
+      errors.vendorAddress = "Field cannot be empty"
     }
     if (!formData.vendor.cityStateZip.trim()) {
-      errors.vendorCityStateZip = "Field cannot be empty";
+      errors.vendorCityStateZip = "Field cannot be empty"
     }
     if (!formData.vendor.country.trim()) {
-      errors.vendorCountry = "Field cannot be empty";
+      errors.vendorCountry = "Field cannot be empty"
     }
 
-    // Order info validation
     if (!formData.orderInfo.poNumber.trim()) {
-      errors.poNumber = "Field cannot be empty";
+      errors.poNumber = "Field cannot be empty"
+    } else if (!/^\d+$/.test(formData.orderInfo.poNumber)) {
+      errors.poNumber = "PO Number must be an integer"
     }
 
-    // Line items validation
+    if (formData.company.cityStateZip && !/^\d+$/.test(formData.company.cityStateZip)) {
+      errors.companyCityStateZip = "Pincode must be an integer"
+    }
+
+    if (formData.vendor.cityStateZip && !/^\d+$/.test(formData.vendor.cityStateZip)) {
+      errors.vendorCityStateZip = "Pincode must be an integer"
+    }
+
     formData.lineItems.forEach((item, index) => {
       if (!item.description.trim()) {
-        errors[`lineItemDescription_${index}`] = "Field cannot be empty";
+        errors[`lineItemDescription_${index}`] = "Field cannot be empty"
       }
       if (item.quantity <= 0) {
-        errors[`lineItemQuantity_${index}`] = "Field cannot be empty";
+        errors[`lineItemQuantity_${index}`] = "Field cannot be empty"
       }
-      if (item.rate <= 0) {
-        errors[`lineItemRate_${index}`] = "Field cannot be empty";
+      if (item.rate < 0) {
+        errors[`lineItemRate_${index}`] = "Cannot be negative"
       }
-    });
+      if (item.gst < 0) {
+        errors[`lineItemGst_${index}`] = "Cannot be negative"
+      }
+    })
 
-    setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleSubmit = async () => {
-    // Validate form before submission
-    if (!validateForm()) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    setSubmitStatus("idle");
-
-    try {
-      await updateGoogleSheet(); // Ensure Google Sheet is updated
-
-      const payload = {
+    if (Object.keys(errors).length > 0) {
+      console.warn("[PO][UI] Validation errors:", errors)
+      console.log("[PO][UI] Form data state:", {
         company: {
           name: formData.company.name,
+          contact: formData.company.contact,
           address: formData.company.address,
           cityStateZip: formData.company.cityStateZip,
-          country: formData.company.country
+          country: formData.company.country,
         },
         vendor: {
           name: formData.vendor.name,
           address: formData.vendor.address,
           cityStateZip: formData.vendor.cityStateZip,
-          country: formData.vendor.country
+          country: formData.vendor.country,
         },
         orderInfo: {
           poNumber: formData.orderInfo.poNumber,
-          orderDate: new Date(formData.orderInfo.orderDate).toISOString().split("T")[0],
-          deliveryDate: new Date(formData.orderInfo.deliveryDate).toISOString().split("T")[0]
         },
-        lineItems: formData.lineItems.map((item) => ({
+        lineItems: formData.lineItems.map((item, idx) => ({
+          index: idx,
           description: item.description,
           quantity: item.quantity,
           rate: item.rate,
-          amount: item.amount
+          gst: item.gst,
         })),
-        subTotal: formData.subTotal,
-        taxRate: formData.taxRate,
-        taxAmount: formData.taxAmount,
-        total: formData.total
-      };
+      })
+    }
 
-      const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-      const response = await fetch(`${API_BASE_URL}/purchaseorder`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
+    setValidationErrors(errors)
+    return Object.keys(errors).length === 0
+  }
 
-      if (!response.ok) {
-        throw new Error("Failed to submit order");
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      console.warn("[PO][UI] Validation failed; blocking submit")
+      return
+    }
+
+    setIsSubmitting(true)
+    setSubmitStatus("idle")
+
+    try {
+      // Duplicate check first
+      const dup = await checkDuplicate()
+      if (dup?.exists) {
+        setSubmitStatus("idle")
+        setModal({
+          title: "Duplicate entry not allowed",
+          description: (
+            <div>
+              <div>An identical purchase order already exists in the system.</div>
+              <div style={{ marginTop: 6 }}>
+                You can download the PDF of the existing record or close this
+                message to review your inputs.
+              </div>
+            </div>
+          ),
+          primaryText: "Download PDF",
+          secondaryText: "Close",
+          onPrimary: () => {
+            setModal(null)
+            // Reuse Export to PDF flow; it will detect duplicate and download
+            exportToPDF()
+          },
+          onClose: () => setModal(null),
+        })
+        return
       }
 
-      const responseData = await response.json();
-      setSubmitStatus("success");
-      console.log("Purchase order submitted with unique reference ID:", responseData.unique_ref_id);
+      const payload = buildPurchaseOrderPayload(formData)
+      console.log("[PO][UI] submit payload", payload)
+      const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000"
+      const response = await fetch(`${API_BASE_URL}/purchaseorder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        const errText = await response.text()
+        console.error("[PO][UI] submit failed", response.status, errText)
+        throw new Error(`Failed to submit order (${response.status}): ${errText}`)
+      }
+      const responseData = await response.json()
+      console.log("[PO][UI] submit success", responseData)
+      const receivedUniqueId = responseData.unique_id || responseData.data?.unique_id || ""
+
+      // Update Google Sheet with unique_id
+      try {
+        await updateGoogleSheet(receivedUniqueId)
+      } catch (sheetError) {
+        console.warn("[PO][UI] Google Sheet update failed, but order was submitted:", sheetError)
+      }
+
+      setSubmitStatus("success")
     } catch (error) {
-      console.error("Error submitting order:", error);
-      setSubmitStatus("error");
+      console.error("[PO][UI] Error submitting order:", error)
+      setSubmitStatus("error")
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   const removeLineItem = (id) => {
-    const updatedItems = formData.lineItems.filter((item) => item.id !== id);
-    const totals = calculateTotals(updatedItems);
+    const updatedItems = formData.lineItems.filter((item) => item.id !== id)
+    const totals = calculateTotals(updatedItems)
     setFormData({
       ...formData,
       lineItems: updatedItems,
-      ...totals
-    });
-  };
+      ...totals,
+    })
+  }
 
   return (
     <>
       <SimpleHeader />
       <div className="page-wrapper">
-        <div className="container">
-          {/* Header */}
-          <div className="header">
-            <div className="header-left">
+        <div className="po-header">
+          <h1 className="po-title">Purchase Order</h1>
+          <div className="po-logo">
+            <div className="logo-badge">P</div>
+            <div className="logo-text-group">
+              <div className="logo-brand">Proquo.tech</div>
+              <div className="logo-subtitle">procurement</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="details-grid">
+          <div className="detail-card">
+            <h2 className="card-title">Buyer Details</h2>
+            <div className="form-group">
+              <label className="form-label">Buyer/Company Name</label>
               <Input
                 value={formData.company.name}
                 onChange={handleCompanyNameChange}
                 ariaLabel="Company name"
-                className="company-input"
+                className="form-input"
+                placeholder="Enter company name"
               />
               <ErrorMessage message={validationErrors.companyName} />
-              <div className="company-details">
-                <div>
-                  <Input
-                    placeholder="Contact person / Your Name"
-                    value={formData.company.contact || ""}
-                    ariaLabel="Company contact"
-                    onChange={updateNestedField("company", "contact")}
-                    className="input-description"
-                  />
-                  <ErrorMessage message={validationErrors.companyContact} />
-                </div>
-                <div>
-                  <Input
-                    placeholder="Company Address"
-                    value={formData.company.address}
-                    ariaLabel="Company address"
-                    onChange={updateNestedField("company", "address")}
-                    className="input-description"
-                  />
-                  <ErrorMessage message={validationErrors.companyAddress} />
-                </div>
-                <div>
-                  <Input
-                    placeholder="City, State Zip"
-                    value={formData.company.cityStateZip}
-                    ariaLabel="Company city state zip"
-                    onChange={updateNestedField("company", "cityStateZip")}
-                    className="input-description"
-                  />
-                  <ErrorMessage message={validationErrors.companyCityStateZip} />
-                </div>
-                <div>
-                  <Input
-                    placeholder="Country"
-                    value={formData.company.country}
-                    ariaLabel="Company country"
-                    onChange={updateNestedField("company", "country")}
-                    className="input-description"
-                  />
-                  <ErrorMessage message={validationErrors.companyCountry} />
-                </div>
-              </div>
             </div>
-            <div className="header-right">
-              <h1>PURCHASE ORDER</h1>
-            </div>
-          </div>
 
-          {/* Vendor + Order Info */}
-          <div className="vendor-order-info">
-            <div className="vendor-address">
-              <h2>Vendor Address:</h2>
-              <div>
-                <div>
-                  <Input
-                    placeholder="Vendor name"
-                    value={formData.vendor.name}
-                    ariaLabel="Vendor name"
-                    onChange={updateNestedField("vendor", "name")}
-                    className="input-description"
-                  />
-                  <ErrorMessage message={validationErrors.vendorName} />
-                </div>
-                <div>
-                  <Input
-                    placeholder="Vendor address"
-                    value={formData.vendor.address}
-                    ariaLabel="Vendor address"
-                    onChange={updateNestedField("vendor", "address")}
-                    className="input-description"
-                  />
-                  <ErrorMessage message={validationErrors.vendorAddress} />
-                </div>
-                <div>
-                  <Input
-                    placeholder="City, State Zip"
-                    value={formData.vendor.cityStateZip}
-                    ariaLabel="Vendor city state zip"
-                    onChange={updateNestedField("vendor", "cityStateZip")}
-                    className="input-description"
-                  />
-                  <ErrorMessage message={validationErrors.vendorCityStateZip} />
-                </div>
-                <div>
-                  <Input
-                    placeholder="Country"
-                    value={formData.vendor.country}
-                    ariaLabel="Vendor country"
-                    onChange={updateNestedField("vendor", "country")}
-                    className="input-description"
-                  />
-                  <ErrorMessage message={validationErrors.vendorCountry} />
-                </div>
-              </div>
+            <div className="form-group">
+              <label className="form-label">Company Address</label>
+              <Input
+                placeholder="Enter company address"
+                value={formData.company.address}
+                ariaLabel="Company address"
+                onChange={updateNestedField("company", "address")}
+                className="form-input"
+              />
+              <ErrorMessage message={validationErrors.companyAddress} />
             </div>
-            <div className="order-info">
-              <div>
-                <span className="label">PO#</span>
-                <Input
-                  placeholder="PO number"
-                  value={formData.orderInfo.poNumber}
-                  ariaLabel="PO number"
-                  onChange={updateNestedField("orderInfo", "poNumber")}
-                  className="input-description"
-                />
-                <ErrorMessage message={validationErrors.poNumber} />
-              </div>
-              <div>
-                <span className="label">Order Date</span>
+
+            <div className="form-group">
+              <label className="form-label">Pincode</label>
+              <Input
+                placeholder="Enter pincode"
+                value={formData.company.cityStateZip}
+                ariaLabel="Company pincode"
+                onChange={updateNumericField("company", "cityStateZip")}
+                className="form-input"
+              />
+              <ErrorMessage message={validationErrors.companyCityStateZip} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Country</label>
+              <Input
+                placeholder="Enter country"
+                value={formData.company.country}
+                ariaLabel="Company country"
+                onChange={updateNestedField("company", "country")}
+                className="form-input"
+              />
+              <ErrorMessage message={validationErrors.companyCountry} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Order Date</label>
+              <div className="date-input-wrapper">
                 <Input
                   type="date"
                   value={formData.orderInfo.orderDate}
                   ariaLabel="Order date"
                   onChange={updateNestedField("orderInfo", "orderDate")}
-                  className="input-description"
+                  className="form-input"
                 />
+                <Calendar className="date-icon" size={20} />
               </div>
-              <div>
-                <span className="label">Delivery Date</span>
-                <Input
-                  type="date"
-                  value={formData.orderInfo.deliveryDate}
-                  ariaLabel="Delivery date"
-                  onChange={updateNestedField("orderInfo", "deliveryDate")}
-                  className="input-description"
-                />
-              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Contact Person</label>
+              <Input
+                placeholder="Enter contact person name"
+                value={formData.company.contact || ""}
+                ariaLabel="Company contact"
+                onChange={updateNestedField("company", "contact")}
+                className="form-input"
+              />
+              <ErrorMessage message={validationErrors.companyContact} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">PO Number</label>
+              <Input
+                placeholder="Enter PO number"
+                value={formData.orderInfo.poNumber}
+                ariaLabel="PO number"
+                onChange={updateNumericField("orderInfo", "poNumber")}
+                className="form-input"
+              />
+              <ErrorMessage message={validationErrors.poNumber} />
             </div>
           </div>
 
-          {/* Line Items */}
-          <div className="line-items">
-            <table>
+          <div className="detail-card">
+            <h2 className="card-title">Vendor Details</h2>
+            <div className="form-group">
+              <label className="form-label">Vendor Name</label>
+              <Input
+                placeholder="Enter vendor name"
+                value={formData.vendor.name}
+                ariaLabel="Vendor name"
+                onChange={updateNestedField("vendor", "name")}
+                className="form-input"
+              />
+              <ErrorMessage message={validationErrors.vendorName} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Vendor Address</label>
+              <Input
+                placeholder="Enter vendor address"
+                value={formData.vendor.address}
+                ariaLabel="Vendor address"
+                onChange={updateNestedField("vendor", "address")}
+                className="form-input"
+              />
+              <ErrorMessage message={validationErrors.vendorAddress} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Pincode</label>
+              <Input
+                placeholder="Enter pincode"
+                value={formData.vendor.cityStateZip}
+                ariaLabel="Vendor pincode"
+                onChange={updateNumericField("vendor", "cityStateZip")}
+                className="form-input"
+              />
+              <ErrorMessage message={validationErrors.vendorCityStateZip} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Country</label>
+              <Input
+                placeholder="Enter country"
+                value={formData.vendor.country}
+                ariaLabel="Vendor country"
+                onChange={updateNestedField("vendor", "country")}
+                className="form-input"
+              />
+              <ErrorMessage message={validationErrors.vendorCountry} />
+            </div>
+
+            <div className="order-info-section">
+              <h3 className="section-subtitle">Order Information</h3>
+              <div className="form-group">
+                <label className="form-label">PO Number</label>
+                <Input
+                  placeholder="Enter PO number"
+                  value={formData.orderInfo.poNumber}
+                  ariaLabel="PO number"
+                  onChange={updateNumericField("orderInfo", "poNumber")}
+                  className="form-input"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Delivery Date</label>
+                <div className="date-input-wrapper">
+                  <Input
+                    type="date"
+                    value={formData.orderInfo.deliveryDate}
+                    ariaLabel="Delivery date"
+                    onChange={updateNestedField("orderInfo", "deliveryDate")}
+                    className="form-input"
+                  />
+                  <Calendar className="date-icon" size={20} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="line-items-card">
+          <h2 className="card-title">Line Items</h2>
+          <div className="table-wrapper">
+            <table className="line-items-table">
               <thead>
                 <tr>
-                  <th className="left">Item Description</th>
-                  <th className="center qty">Qty</th>
-                  <th className="center rate">Rate</th>
-                  <th className="center gst">GST (%)</th>
-                  <th className="right amount">Amount</th>
-                  <th className="center actions">Actions</th>
+                  <th className="col-description">Item Description</th>
+                  <th className="col-quantity">Quantity</th>
+                  <th className="col-rate">Rate</th>
+                  <th className="col-gst">GST (%)</th>
+                  <th className="col-amount">Amount</th>
+                  <th className="col-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {formData.lineItems.map((item, index) => (
                   <tr key={item.id}>
-                    <td>
+                    <td className="col-description">
                       <Input
                         placeholder="Enter item description"
                         value={item.description}
                         ariaLabel="Item description"
                         onChange={(e) => updateLineItem(item.id, "description", e.target.value)}
-                        className="input-description"
+                        className="table-input"
                       />
                       <ErrorMessage message={validationErrors[`lineItemDescription_${index}`]} />
                     </td>
-                    <td className="center">
+                    <td className="col-quantity">
                       <Input
                         type="number"
                         min="0"
                         value={item.quantity}
                         ariaLabel="Quantity"
                         onChange={(e) => updateLineItem(item.id, "quantity", Number.parseFloat(e.target.value) || 0)}
-                        className="input-qty"
+                        className="table-input"
                       />
                       <ErrorMessage message={validationErrors[`lineItemQuantity_${index}`]} />
                     </td>
-                    <td className="center">
+                    <td className="col-rate">
                       <Input
                         type="number"
                         min="0"
@@ -665,11 +1048,11 @@ export default function Purchase() {
                         value={item.rate.toFixed(2)}
                         ariaLabel="Rate"
                         onChange={(e) => updateLineItem(item.id, "rate", Number.parseFloat(e.target.value) || 0)}
-                        className="input-rate"
+                        className="table-input"
                       />
                       <ErrorMessage message={validationErrors[`lineItemRate_${index}`]} />
                     </td>
-                    <td className="center">
+                    <td className="col-gst">
                       <Input
                         type="number"
                         min="0"
@@ -677,71 +1060,73 @@ export default function Purchase() {
                         value={item.gst.toFixed(2)}
                         ariaLabel="GST"
                         onChange={(e) => updateLineItem(item.id, "gst", Number.parseFloat(e.target.value) || 0)}
-                        className="input-gst"
+                        className="table-input"
                       />
+                      <ErrorMessage message={validationErrors[`lineItemGst_${index}`]} />
                     </td>
-                    <td className="right">{item.amount.toFixed(2)}</td>
-                    <td className="center">
+                    <td className="col-amount">₹ {item.amount.toFixed(2)}</td>
+                    <td className="col-actions">
                       <button
                         type="button"
                         onClick={() => removeLineItem(item.id)}
-                        className="remove-btn"
+                        className="delete-btn"
                         aria-label="Remove line item"
                       >
-                        <X className="icon" />
+                        <X size={18} />
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
 
-            {/* Add Line Item */}
-            <button type="button" onClick={addLineItem} className="add-line-item">
-              <div className="add-icon">
-                <Plus className="plus-icon" />
-              </div>
-              Add Line Item
-            </button>
+          <button type="button" onClick={addLineItem} className="add-line-item-btn">
+            <Plus size={18} />
+            Add Line Item
+          </button>
+        </div>
 
-            {/* Totals */}
-            <div className="totals">
-              <div className="subtotal">
-                <span>Sub Total</span>
-                <span>{formData.subTotal.toFixed(2)}</span>
-              </div>
-              <div className="total">
-                <span>TOTAL</span>
-                <span>{`₹ ${formData.total.toFixed(2)}`}</span>
-              </div>
+        <div className="footer-section">
+          <div className="totals-group">
+            <div className="total-row total-final">
+              <span className="total-label">Total: ₹ {formData.total.toFixed(2)}</span>
             </div>
+          </div>
 
-            {/* Buttons */}
-            <div className="buttons">
-              {/* <Button onClick={exportToJSON} className="export-btn">
-                Export to JSON
-              </Button> */}
-              <Button onClick={exportToPDF} className="export-btn">
-                Export to PDF
-              </Button>
-              <Button onClick={handleSubmit} disabled={isSubmitting} className="submit-btn">
-                {isSubmitting ? "Submitting..." : "Submit Order"}
-              </Button>
-            </div>
-
-            {/* Status */}
-            {submitStatus === "success" && (
-              <div className="status success">
-                Purchase order submitted successfully!
-                <br />
-              </div>
-            )}
-            {submitStatus === "error" && (
-              <div className="status error">Failed to submit purchase order. Please try again.</div>
-            )}
+          <div className="action-buttons">
+            <Button onClick={exportToPDF} className="btn-secondary">
+              Export to PDF
+            </Button>
+            {/* <Button onClick={exportToJSON} className="btn-secondary">
+              Export to JSON
+            </Button> */}
+            <Button onClick={handleSubmit} disabled={isSubmitting} className="btn-primary">
+              {isSubmitting ? "Submitting..." : "Submit Order"}
+            </Button>
           </div>
         </div>
+
+        {modal && (
+          <Modal
+            title={modal.title}
+            description={modal.description}
+            primaryText={modal.primaryText}
+            secondaryText={modal.secondaryText}
+            onPrimary={modal.onPrimary}
+            onClose={modal.onClose}
+          />
+        )}
+
+        {submitStatus === "success" && (
+          <div className="status success">
+            Purchase order submitted successfully!
+          </div>
+        )}
+        {submitStatus === "error" && (
+          <div className="status error">Failed to submit purchase order. Please try again.</div>
+        )}
       </div>
     </>
-  );
+  )
 }
