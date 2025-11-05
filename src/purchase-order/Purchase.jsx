@@ -1,3 +1,5 @@
+"use client";
+
 /* eslint-disable react/react-in-jsx-scope, jsx-a11y/label-has-associated-control */
 /* eslint-disable react/jsx-one-expression-per-line, object-curly-newline, comma-dangle, semi */
 
