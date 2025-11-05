@@ -1,5 +1,3 @@
-"use client";
-
 /* eslint-disable react/react-in-jsx-scope, jsx-a11y/label-has-associated-control */
 /* eslint-disable react/jsx-one-expression-per-line, object-curly-newline, comma-dangle, semi */
 
@@ -33,11 +31,12 @@ Button.defaultProps = {
   className: "",
 }
 
-function Input({ className, value, onChange, type, placeholder, ariaLabel }) {
+function Input({ className, value, onChange, type, placeholder, ariaLabel, onBlur }) {
   return (
     <input
       value={value}
       onChange={onChange}
+      onBlur={onBlur}
       type={type}
       placeholder={placeholder}
       aria-label={ariaLabel || "input"}
@@ -102,6 +101,7 @@ Input.propTypes = {
   className: PropTypes.string,
   value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   onChange: PropTypes.func,
+  onBlur: PropTypes.func,
   type: PropTypes.string,
   placeholder: PropTypes.string,
   ariaLabel: PropTypes.string,
@@ -111,6 +111,7 @@ Input.defaultProps = {
   className: "",
   value: "",
   onChange: () => {},
+  onBlur: undefined,
   type: "text",
   placeholder: "",
   ariaLabel: "input",
@@ -201,14 +202,14 @@ export default function Purchase() {
       name: "",
       address: "",
       cityStateZip: "",
-      country: "",
+      country: "India",
       contact: "",
     },
     vendor: {
       name: "",
       address: "",
       cityStateZip: "",
-      country: "",
+      country: "India",
     },
     orderInfo: {
       poNumber: "",
@@ -219,7 +220,7 @@ export default function Purchase() {
       {
         id: "1",
         description: "",
-        quantity: 1,
+        quantity: 0,
         rate: 0.0,
         gst: 0.0,
         amount: 0.0,
@@ -235,6 +236,10 @@ export default function Purchase() {
   const [submitStatus, setSubmitStatus] = useState("idle")
   const [validationErrors, setValidationErrors] = useState({})
   const [modal, setModal] = useState(null)
+  // Track display values for rate, gst, and quantity fields to allow intermediate typing states
+  const [rateDisplayValues, setRateDisplayValues] = useState({})
+  const [gstDisplayValues, setGstDisplayValues] = useState({})
+  const [quantityDisplayValues, setQuantityDisplayValues] = useState({})
 
   const handleCompanyNameChange = (e) => {
     setFormData({
@@ -297,7 +302,7 @@ export default function Purchase() {
     const newItem = {
       id: Date.now().toString(),
       description: "",
-      quantity: 1,
+      quantity: 0,
       rate: 0.0,
       gst: 0.0,
       amount: 0.0,
@@ -492,11 +497,65 @@ export default function Purchase() {
 
       let y = marginY + 14
 
-      // Subtle watermark
-      doc.setFontSize(46)
-      doc.setTextColor(240, 245, 255)
-      doc.text("Proquo.tech", pageWidth / 2, pageHeight / 2, { align: "center", angle: -25 })
-      doc.setTextColor(0, 0, 0)
+      // Number to words converter function
+      const numberToWords = (num) => {
+        const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+          "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+        const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+
+        const convertHundreds = (n) => {
+          if (n === 0) return ""
+          if (n < 20) return ones[n]
+          if (n < 100) {
+            const ten = Math.floor(n / 10)
+            const one = n % 10
+            return `${tens[ten]}${one ? ` ${ones[one]}` : ""}`
+          }
+          const hundred = Math.floor(n / 100)
+          const remainder = n % 100
+          return `${ones[hundred]} Hundred${remainder ? ` ${convertHundreds(remainder)}` : ""}`
+        }
+
+        const numStr = Number(num).toFixed(2).toString()
+        const parts = numStr.split(".")
+        let rupees = parseInt(parts[0], 10)
+        const paise = parseInt(parts[1] || "0", 10)
+
+        if (rupees === 0 && paise === 0) return "Zero Rupees only"
+
+        let result = ""
+
+        if (rupees >= 10000000) {
+          const crores = Math.floor(rupees / 10000000)
+          result += `${convertHundreds(crores)} Crore `
+          rupees %= 10000000
+        }
+
+        if (rupees >= 100000) {
+          const lakhs = Math.floor(rupees / 100000)
+          result += `${convertHundreds(lakhs)} Lakh `
+          rupees %= 100000
+        }
+
+        if (rupees >= 1000) {
+          const thousands = Math.floor(rupees / 1000)
+          result += `${convertHundreds(thousands)} Thousand `
+          rupees %= 1000
+        }
+
+        if (rupees > 0) {
+          result += convertHundreds(rupees)
+        }
+
+        result = result.trim()
+        if (result) result += " Rupees"
+        if (paise > 0) {
+          result += `${result ? " " : ""}${convertHundreds(paise)} Paise`
+        }
+        result += " only"
+
+        return result
+      }
 
       // Buyer/Company Details Section
       doc.setFont("helvetica", "bold")
@@ -583,18 +642,80 @@ export default function Purchase() {
         y += lineHeight
       }
 
-      // Line Items Table
+      // Calculate totals and GST amounts
+      const subTotal = formData.lineItems.reduce((sum, item) => {
+        const qty = Number(item.quantity || 0)
+        const rate = Number(item.rate || 0)
+        return sum + (qty * rate)
+      }, 0)
+
+      const totalGSTAmount = formData.lineItems.reduce((sum, item) => {
+        const qty = Number(item.quantity || 0)
+        const rate = Number(item.rate || 0)
+        const gstPercent = Number(item.gst || 0)
+        const itemSubTotal = qty * rate
+        return sum + (itemSubTotal * gstPercent / 100)
+      }, 0)
+
+      // Calculate average GST percentage for SGST/CGST display
+      // If all items have same GST, use that; otherwise calculate weighted average
+      let avgGSTPercent = 0
+      if (formData.lineItems.length > 0) {
+        const weightedSum = formData.lineItems.reduce((sum, item) => {
+          const qty = Number(item.quantity || 0)
+          const rate = Number(item.rate || 0)
+          const gstPercent = Number(item.gst || 0)
+          const itemSubTotal = qty * rate
+          return sum + (itemSubTotal * gstPercent)
+        }, 0)
+        avgGSTPercent = subTotal > 0 ? weightedSum / subTotal : 0
+      }
+
+      const sgstPercent = (avgGSTPercent / 2).toFixed(1)
+      const cgstPercent = sgstPercent
+      const sgstAmount = totalGSTAmount / 2
+      const cgstAmount = totalGSTAmount / 2
+      const grandTotal = subTotal + totalGSTAmount
+      const advance = 0 // Can be made configurable later
+      const balance = grandTotal - advance
+
+      // Line Items Table with new columns
       const tableStartY = y + 8
       autoTable(doc, {
         startY: tableStartY,
-        head: [["Item Description", "Qty", "Rate", "GST (%)", "Amount"]],
-        body: formData.lineItems.map((item) => [
-          safe(item.description || ""),
-          Number(item.quantity || 0),
-          formatNumber(item.rate || 0),
-          formatNumber(item.gst || 0),
-          formatNumber(item.amount || 0),
-        ]),
+        head: [["#", "Item name", "Quantity", "Unit", "Price/Rate", "GST", "Amount"]],
+        body: formData.lineItems.map((item, index) => {
+          const qty = Number(item.quantity || 0)
+          const rate = Number(item.rate || 0)
+          const gstPercent = Number(item.gst || 0)
+          const itemSubTotal = qty * rate
+          const itemGSTAmount = itemSubTotal * gstPercent / 100
+          const itemAmount = itemSubTotal + itemGSTAmount
+
+          return [
+            index + 1, // Serial number
+            safe(item.description || ""),
+            formatNumber(qty),
+            "MT", // Unit - always MT
+            `INR ${formatNumber(rate)}`,
+            `INR ${formatNumber(itemGSTAmount)} (${gstPercent.toFixed(2)}%)`,
+            `INR ${formatNumber(itemAmount)}`,
+          ]
+        }),
+        // Add total row
+        foot: [
+          [
+            "",
+            { content: "NET TOTAL", styles: { fontStyle: "bold", halign: "left" } },
+            formatNumber(
+              formData.lineItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+            ),
+            "",
+            "",
+            `INR ${formatNumber(totalGSTAmount)}`,
+            `INR ${formatNumber(grandTotal)}`,
+          ]
+        ],
         theme: "grid",
         styles: {
           fontSize: 8,
@@ -608,39 +729,104 @@ export default function Purchase() {
           fontSize: 9,
           fontStyle: "bold",
         },
+        footStyles: {
+          fillColor: [255, 255, 255],
+          textColor: [0, 0, 0],
+          fontSize: 9,
+          fontStyle: "bold",
+        },
         alternateRowStyles: { fillColor: lightGray },
         columnStyles: {
-          0: { halign: "left", cellWidth: 90 },
-          1: { halign: "center", cellWidth: 18 },
-          2: { halign: "center", cellWidth: 25 },
-          3: { halign: "center", cellWidth: 25 },
-          4: { halign: "right", cellWidth: 30 },
+          0: { halign: "center", cellWidth: 8 }, // #
+          1: { halign: "left", cellWidth: 55 }, // Item name
+          2: { halign: "center", cellWidth: 20 }, // Quantity
+          3: { halign: "center", cellWidth: 12 }, // Unit
+          4: { halign: "right", cellWidth: 25 }, // Price/Unit
+          5: { halign: "right", cellWidth: 30 }, // GST
+          6: { halign: "right", cellWidth: 30 }, // Amount
         },
         margin: { left: marginX, right: marginX },
       })
 
-      // Totals Section (only TOTAL)
-      const afterTableY = doc.lastAutoTable.finalY + 6
+      // Summary Section (Right side below table)
+      const afterTableY = doc.lastAutoTable.finalY + 8
+      const summaryStartY = afterTableY
+      const summaryX = pageWidth - marginX - 70
+      const summaryWidth = 70
+
       autoTable(doc, {
-        startY: afterTableY,
+        startY: summaryStartY,
         body: [
+          ["Sub Total", `INR ${formatNumber(subTotal)}`],
+          [`SGST@${sgstPercent}%`, `INR ${formatNumber(sgstAmount)}`],
+          [`CGST@${cgstPercent}%`, `INR ${formatNumber(cgstAmount)}`],
           [
-            { content: "TOTAL", styles: { fontStyle: "bold", fontSize: 9, textColor: primary } },
-            { content: formatCurrency(formData.total), styles: { fontStyle: "bold", fontSize: 9, textColor: primary } },
+            {
+              content: "Total",
+              styles: { fontStyle: "bold", fontSize: 9, fillColor: primary, textColor: [255, 255, 255] }
+            },
+            {
+              content: `INR ${formatNumber(grandTotal)}`,
+              styles: { fontStyle: "bold", fontSize: 9, fillColor: primary, textColor: [255, 255, 255] }
+            }
           ],
+          ["Payment Mode", "Credit"],
         ],
         theme: "plain",
-        styles: { fontSize: 9, halign: "right", cellPadding: 2 },
-        tableWidth: 75,
-        margin: { left: pageWidth - marginX - 75 },
+        styles: {
+          fontSize: 8,
+          halign: "right",
+          cellPadding: 3,
+          textColor: [0, 0, 0]
+        },
+        columnStyles: {
+          0: { halign: "left", cellWidth: summaryWidth * 0.6 },
+          1: { halign: "right", cellWidth: summaryWidth * 0.4 },
+        },
+        tableWidth: summaryWidth,
+        margin: { left: summaryX },
       })
 
-      // Footer
-      const footerY = Math.min(doc.lastAutoTable.finalY + 10, pageHeight - 15)
-      doc.setFontSize(7)
-      doc.setTextColor(slate[0], slate[1], slate[2])
+      // Left side sections: Order Amount In Words and Terms & Conditions
+      const leftSectionY = afterTableY
+      let leftY = leftSectionY
+
+      // Order Amount In Words
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(9)
+      doc.text("Order Amount In Words", marginX, leftY)
+      leftY += 5
       doc.setFont("helvetica", "normal")
-      doc.text("Generated by Proquo", marginX, footerY)
+      doc.setFontSize(8)
+      const amountInWords = numberToWords(grandTotal)
+      doc.text(amountInWords, marginX, leftY, { maxWidth: 100 })
+      leftY += 12
+
+      // Terms and Conditions
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(9)
+      doc.text("Terms And Conditions", marginX, leftY)
+      leftY += 5
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(8)
+      const termsText = "Quality shall be kept best as per standards, any deviation seen shall attract to rejection of materials at site."
+      doc.text(termsText, marginX, leftY, { maxWidth: 100 })
+
+      // Signature block (bottom right)
+      const signatureY = Math.max(doc.lastAutoTable.finalY + 15, leftY + 15)
+      const signatureX = pageWidth - marginX - 60
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(10)
+      doc.text(`For ${safe(formData.company.name || "Company Name")}`, signatureX, signatureY)
+
+      // Draw signature line with blank space above for signing
+      doc.setDrawColor(0, 0, 0)
+      doc.setLineWidth(0.3)
+      doc.line(signatureX, signatureY + 13, signatureX + 50, signatureY + 13)
+
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(7)
+      doc.text("Authorized Signatory", signatureX, signatureY + 16)
 
       doc.save(`purchase-order-${formData.orderInfo.poNumber || "PO"}.pdf`)
       console.log("[PO][UI] PDF downloaded")
@@ -821,6 +1007,16 @@ export default function Purchase() {
       lineItems: updatedItems,
       ...totals,
     })
+    // Clean up display values for removed item
+    const newRateValues = { ...rateDisplayValues }
+    delete newRateValues[id]
+    setRateDisplayValues(newRateValues)
+    const newGstValues = { ...gstDisplayValues }
+    delete newGstValues[id]
+    setGstDisplayValues(newGstValues)
+    const newQuantityValues = { ...quantityDisplayValues }
+    delete newQuantityValues[id]
+    setQuantityDisplayValues(newQuantityValues)
   }
 
   return (
@@ -1037,35 +1233,123 @@ export default function Purchase() {
                     </td>
                     <td className="col-quantity">
                       <Input
-                        type="number"
-                        min="0"
-                        value={item.quantity}
+                        type="text"
+                        placeholder="0"
+                        value={(() => {
+                          if (quantityDisplayValues[item.id] !== undefined) {
+                            return quantityDisplayValues[item.id]
+                          }
+                          if (item.quantity === 0) {
+                            return ""
+                          }
+                          return item.quantity.toString()
+                        })()}
                         ariaLabel="Quantity"
-                        onChange={(e) => updateLineItem(item.id, "quantity", Number.parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const inputValue = e.target.value
+                          // Allow empty or valid integer patterns
+                          if (inputValue === "") {
+                            setQuantityDisplayValues({ ...quantityDisplayValues, [item.id]: "" })
+                            updateLineItem(item.id, "quantity", 0)
+                          } else if (/^\d+$/.test(inputValue)) {
+                            // Store the display value to allow intermediate states
+                            setQuantityDisplayValues({
+                              ...quantityDisplayValues,
+                              [item.id]: inputValue,
+                            })
+                            const parsed = Number.parseInt(inputValue, 10)
+                            if (!Number.isNaN(parsed)) {
+                              updateLineItem(item.id, "quantity", parsed)
+                            }
+                          }
+                        }}
+                        onBlur={() => {
+                          // Clear display value on blur to sync with actual numeric value
+                          const newDisplayValues = { ...quantityDisplayValues }
+                          delete newDisplayValues[item.id]
+                          setQuantityDisplayValues(newDisplayValues)
+                        }}
                         className="table-input"
                       />
                       <ErrorMessage message={validationErrors[`lineItemQuantity_${index}`]} />
                     </td>
                     <td className="col-rate">
                       <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.rate.toFixed(2)}
+                        type="text"
+                        placeholder="0.00"
+                        value={(() => {
+                          if (rateDisplayValues[item.id] !== undefined) {
+                            return rateDisplayValues[item.id]
+                          }
+                          if (item.rate === 0) {
+                            return ""
+                          }
+                          return item.rate.toString()
+                        })()}
                         ariaLabel="Rate"
-                        onChange={(e) => updateLineItem(item.id, "rate", Number.parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const inputValue = e.target.value
+                          // Allow empty or valid number patterns (including decimals)
+                          if (inputValue === "") {
+                            setRateDisplayValues({ ...rateDisplayValues, [item.id]: "" })
+                            updateLineItem(item.id, "rate", 0)
+                          } else if (/^\d*\.?\d*$/.test(inputValue)) {
+                            // Store the display value to allow intermediate states like "12."
+                            setRateDisplayValues({ ...rateDisplayValues, [item.id]: inputValue })
+                            const parsed = Number.parseFloat(inputValue)
+                            if (!Number.isNaN(parsed)) {
+                              updateLineItem(item.id, "rate", parsed)
+                            } else if (inputValue === ".") {
+                              // Allow typing just a decimal point
+                              updateLineItem(item.id, "rate", 0)
+                            }
+                          }
+                        }}
+                        onBlur={() => {
+                          // Clear display value on blur to sync with actual numeric value
+                          const newDisplayValues = { ...rateDisplayValues }
+                          delete newDisplayValues[item.id]
+                          setRateDisplayValues(newDisplayValues)
+                        }}
                         className="table-input"
                       />
                       <ErrorMessage message={validationErrors[`lineItemRate_${index}`]} />
                     </td>
                     <td className="col-gst">
                       <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.gst.toFixed(2)}
+                        type="text"
+                        placeholder="0"
+                        value={(() => {
+                          if (gstDisplayValues[item.id] !== undefined) {
+                            return gstDisplayValues[item.id]
+                          }
+                          if (item.gst === 0) {
+                            return ""
+                          }
+                          return item.gst.toString()
+                        })()}
                         ariaLabel="GST"
-                        onChange={(e) => updateLineItem(item.id, "gst", Number.parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const inputValue = e.target.value
+                          // Allow empty or valid integer patterns only
+                          if (inputValue === "") {
+                            setGstDisplayValues({ ...gstDisplayValues, [item.id]: "" })
+                            updateLineItem(item.id, "gst", 0)
+                          } else if (/^\d+$/.test(inputValue)) {
+                            // Store the display value to allow intermediate states
+                            setGstDisplayValues({ ...gstDisplayValues, [item.id]: inputValue })
+                            const parsed = Number.parseInt(inputValue, 10)
+                            if (!Number.isNaN(parsed)) {
+                              updateLineItem(item.id, "gst", parsed)
+                            }
+                          }
+                        }}
+                        onBlur={() => {
+                          // Clear display value on blur to sync with actual numeric value
+                          const newDisplayValues = { ...gstDisplayValues }
+                          delete newDisplayValues[item.id]
+                          setGstDisplayValues(newDisplayValues)
+                        }}
                         className="table-input"
                       />
                       <ErrorMessage message={validationErrors[`lineItemGst_${index}`]} />
