@@ -448,42 +448,22 @@ export default function Purchase() {
       doc.setFillColor(primary[0], primary[1], primary[2])
       doc.rect(0, 0, pageWidth, 18, "F")
 
-      // Try to draw brand logo if available; fallback to badge
-      let drewLogo = false
+      // Try to load and draw Procorro logo
       try {
-        const base = process.env.PUBLIC_URL || ""
-        const srcCandidates = [
-          `${base}/proquo-logo.png`,
-          `${base}/proquo-logo.jpg`,
-          `${base}/logo.png`,
-        ]
-        /* eslint-disable no-restricted-syntax */
-        for (const src of srcCandidates) {
-          try {
-            // eslint-disable-next-line no-await-in-loop
-            const img = await loadImage(src)
-            // Place logo on left in ribbon
-            const logoH = 10
-            const logoW = 34
-            doc.addImage(img, "PNG", marginX, 4, logoW, logoH)
-            drewLogo = true
-            break
-          } catch (e) {
-            // try next
-          }
-        }
-        /* eslint-enable no-restricted-syntax */
-      } catch (e) {
-        // ignore
-      }
-      if (!drewLogo) {
-        // Logo badge fallback
-        doc.setFillColor(255, 255, 255)
-        doc.circle(marginX + 6, 9, 5, "F")
-        doc.setTextColor(primary[0], primary[1], primary[2])
+        const logoImg = await loadImage("/procorro-logo.png")
+        const logoH = 10
+        const logoW = (logoImg.width / logoImg.height) * logoH
+        doc.addImage(logoImg, "PNG", marginX, 4, logoW, logoH)
+      } catch (logoError) {
+        // Fallback to drawing logo with shapes if image fails
+        doc.setFillColor(233, 213, 255)
+        doc.ellipse(marginX + 8, 9, 6.5, 5.5, "F")
+        doc.setFillColor(147, 51, 234)
+        doc.circle(marginX + 11, 9, 4.8, "F")
+        doc.setTextColor(255, 255, 255)
         doc.setFont("helvetica", "bold")
-        doc.setFontSize(10)
-        doc.text("P", marginX + 3.6, 12, undefined)
+        doc.setFontSize(11)
+        doc.text("p", marginX + 9.5, 11.5)
       }
 
       // Title
@@ -1028,9 +1008,13 @@ export default function Purchase() {
         <div className="po-header">
           <h1 className="po-title">Purchase Order</h1>
           <div className="po-logo">
-            <div className="logo-badge">P</div>
+            <img
+              src="/procorro-logo.png"
+              alt="Procorro"
+              style={{ height: "50px", width: "auto" }}
+            />
             <div className="logo-text-group">
-              <div className="logo-brand">Proquo.tech</div>
+              <div className="logo-brand">Procorro</div>
               <div className="logo-subtitle">procurement</div>
             </div>
           </div>
